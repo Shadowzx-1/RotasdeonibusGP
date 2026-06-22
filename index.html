@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Transporte Público</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #1a2e4a; --blue: #2563eb; --blue-light: #3b82f6;
+    --white: #ffffff; --gray-50: #f8fafc; --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0; --gray-400: #94a3b8; --gray-600: #475569;
+  }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(135deg, #0f1f35 0%, #1a3a5c 50%, #0f2644 100%);
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .app-header { color: var(--white); text-align: center; margin-bottom: 24px; }
+  .app-header h1 { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #93c5fd; margin-bottom: 4px; }
+  .app-header p { font-size: 11px; color: #64748b; letter-spacing: 0.04em; }
+
+  .phone-frame {
+    width: 340px; height: 680px;
+    background: var(--navy); border-radius: 44px; padding: 14px;
+    box-shadow: 0 0 0 2px #2d4a70, 0 0 0 4px #1a2e4a, 0 40px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
+    position: relative;
+  }
+  .notch {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    width: 100px; height: 24px; background: var(--navy);
+    border-radius: 0 0 16px 16px; z-index: 10;
+  }
+  .phone-screen {
+    width: 100%; height: 100%; background: var(--white);
+    border-radius: 32px; overflow: hidden;
+    position: relative; display: flex; flex-direction: column;
+  }
+  .screen { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+  .screen.active { display: flex; }
+
+  /* LOGIN */
+  .login-screen {
+    background: linear-gradient(160deg, #f0f6ff 0%, #e8f0fe 100%);
+    align-items: center; justify-content: center;
+    padding: 32px 28px; position: relative; overflow: hidden;
+  }
+  .login-screen::before {
+    content: ''; position: absolute;
+    width: 300px; height: 300px; border-radius: 50%;
+    border: 60px solid rgba(37,99,235,0.06);
+    top: -80px; right: -80px; pointer-events: none;
+  }
+  .login-logo {
+    width: 52px; height: 52px; background: var(--blue);
+    border-radius: 16px; display: flex; align-items: center; justify-content: center;
+    margin-bottom: 20px; box-shadow: 0 8px 20px rgba(37,99,235,0.3);
+  }
+  .login-logo svg { width: 28px; height: 28px; fill: white; }
+  .login-screen h2 { font-size: 26px; font-weight: 800; color: var(--navy); margin-bottom: 6px; letter-spacing: -0.5px; }
+  .login-subtitle { font-size: 12px; color: var(--gray-400); margin-bottom: 28px; text-align: center; }
+  .field-label { font-size: 11px; font-weight: 600; color: var(--gray-600); letter-spacing: 0.06em; text-transform: uppercase; align-self: flex-start; margin-bottom: 6px; }
+  .login-input {
+    width: 100%; padding: 11px 16px; border: 2px solid var(--gray-200);
+    border-radius: 50px; font-size: 13px; color: var(--gray-600);
+    background: white; margin-bottom: 16px; outline: none;
+    font-family: 'Inter', sans-serif; pointer-events: none;
+  }
+  .login-btn {
+    width: 100%; padding: 13px; background: var(--navy); color: white;
+    border: none; border-radius: 50px; font-size: 14px; font-weight: 700;
+    margin-top: 8px; cursor: pointer; letter-spacing: 0.04em; transition: opacity 0.2s;
+  }
+  .login-btn:hover { opacity: 0.85; }
+  .login-decorative-note { margin-top: 16px; font-size: 10px; color: var(--gray-400); text-align: center; }
+
+  /* ROUTES */
+  .routes-screen { background: linear-gradient(160deg, #f0f8ff 0%, #f8fafc 100%); padding: 48px 24px 0; flex: 1; overflow-y: auto; }
+  .routes-screen::-webkit-scrollbar { display: none; }
+  .screen-title { font-size: 26px; font-weight: 800; color: var(--navy); margin-bottom: 20px; letter-spacing: -0.5px; }
+  .field-group { margin-bottom: 16px; }
+  .field-group .field-label { display: block; margin-bottom: 6px; }
+  .route-input {
+    width: 100%; padding: 11px 16px; border: 2px solid #cbd5e1;
+    border-radius: 50px; font-size: 13px; color: #334155; background: white;
+    outline: none; font-family: 'Inter', sans-serif; transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .route-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+
+  /* Location bar in routes */
+  .location-bar {
+    display: flex; align-items: center; gap: 8px;
+    background: #eff6ff; border: 1.5px solid #bfdbfe;
+    border-radius: 12px; padding: 10px 14px; margin-bottom: 16px;
+    font-size: 11px; color: var(--navy); font-weight: 500;
+  }
+  .location-bar .dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .location-bar .loc-text { flex: 1; font-size: 10px; color: #1e40af; line-height: 1.3; }
+
+  /* Nearby stops list */
+  .stops-section { margin-top: 12px; }
+  .stops-label { font-size: 11px; font-weight: 600; color: var(--gray-600); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; display: block; }
+  .stop-item {
+    display: flex; align-items: center; gap: 10px;
+    background: white; border: 1.5px solid var(--gray-200);
+    border-radius: 12px; padding: 10px 12px; margin-bottom: 8px;
+    cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .stop-item:hover { border-color: var(--blue-light); box-shadow: 0 2px 8px rgba(37,99,235,0.1); }
+  .stop-icon { width: 32px; height: 32px; border-radius: 8px; background: #dbeafe; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+  .stop-info { flex: 1; }
+  .stop-name { font-size: 12px; font-weight: 600; color: var(--navy); line-height: 1.2; }
+  .stop-dist { font-size: 10px; color: var(--gray-400); margin-top: 2px; }
+  .stop-arrow { font-size: 14px; color: var(--gray-400); }
+
+  /* Loading / error states */
+  .status-box {
+    background: white; border: 1.5px solid var(--gray-200);
+    border-radius: 12px; padding: 20px; text-align: center;
+    font-size: 12px; color: var(--gray-400);
+  }
+  .status-box .spin { display: inline-block; animation: spin 1s linear infinite; font-size: 20px; margin-bottom: 8px; }
+  @keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+  .status-box p { margin-top: 6px; font-size: 11px; }
+
+  /* MAP SCREEN */
+  .map-screen-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .map-header { padding: 48px 24px 12px; background: #f8fafc; flex-shrink: 0; }
+  #leaflet-map {
+    flex: 1;
+    min-height: 0;
+    border-radius: 0;
+  }
+  .map-status-overlay {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    background: white; border-radius: 16px; padding: 20px 24px;
+    text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    font-size: 12px; color: var(--navy); font-weight: 600;
+    pointer-events: none;
+  }
+
+  /* BOTTOM NAV */
+  .bottom-nav {
+    height: 72px; background: var(--navy);
+    display: flex; align-items: center; justify-content: space-around;
+    padding: 0 8px; flex-shrink: 0;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .nav-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 8px 12px; border: none; background: transparent;
+    cursor: pointer; border-radius: 12px; transition: background 0.15s; min-width: 64px;
+  }
+  .nav-btn:hover { background: rgba(255,255,255,0.08); }
+  .nav-btn.active .nav-icon { color: #93c5fd; }
+  .nav-btn.active .nav-label { color: #93c5fd; }
+  .nav-icon { font-size: 20px; color: #64748b; line-height: 1; transition: color 0.15s; display: flex; align-items: center; }
+  .nav-icon svg { width: 20px; height: 20px; }
+  .nav-label { font-size: 9px; font-weight: 600; color: #64748b; letter-spacing: 0.06em; text-transform: uppercase; transition: color 0.15s; }
+  .nav-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: white;
+    border: 2px solid #64748b; transition: border-color 0.15s;
+  }
+  .nav-btn.active .nav-avatar { border-color: #93c5fd; }
+
+  /* PROFILE MODAL */
+  .modal-overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.5);
+    display: flex; align-items: flex-end; z-index: 100;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s;
+    border-radius: 32px; overflow: hidden;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal-sheet {
+    background: white; width: 100%;
+    border-radius: 24px 24px 0 0; padding: 16px 24px 28px;
+    transform: translateY(100%);
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    position: relative;
+  }
+  .modal-overlay.open .modal-sheet { transform: translateY(0); }
+  .modal-handle { width: 36px; height: 4px; background: var(--gray-200); border-radius: 2px; margin: 0 auto 20px; }
+  .profile-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--gray-100); }
+  .profile-avatar-large {
+    width: 60px; height: 60px; border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 800; color: white; flex-shrink: 0;
+  }
+  .profile-info h3 { font-size: 16px; font-weight: 700; color: var(--navy); }
+  .profile-info p { font-size: 12px; color: var(--gray-400); margin-top: 2px; }
+  .profile-badge { display: inline-block; margin-top: 4px; padding: 2px 8px; background: #dbeafe; color: var(--blue); font-size: 10px; font-weight: 600; border-radius: 20px; }
+  .profile-stats { display: flex; margin-bottom: 20px; }
+  .stat-item { flex: 1; text-align: center; padding: 12px 0; border-right: 1px solid var(--gray-100); }
+  .stat-item:last-child { border-right: none; }
+  .stat-value { font-size: 20px; font-weight: 800; color: var(--navy); line-height: 1; }
+  .stat-label { font-size: 9px; color: var(--gray-400); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; }
+  .profile-menu-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 0; border-bottom: 1px solid var(--gray-100);
+    cursor: pointer; transition: opacity 0.15s;
+  }
+  .profile-menu-item:hover { opacity: 0.7; }
+  .profile-menu-item:last-child { border-bottom: none; }
+  .menu-icon { width: 34px; height: 34px; border-radius: 10px; background: var(--gray-100); display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+  .menu-text { flex: 1; font-size: 13px; font-weight: 600; color: var(--navy); }
+  .menu-arrow { font-size: 14px; color: var(--gray-400); }
+  .modal-close {
+    position: absolute; top: 16px; right: 20px;
+    background: var(--gray-100); border: none; width: 28px; height: 28px;
+    border-radius: 50%; font-size: 14px; cursor: pointer; color: var(--gray-600);
+    display: flex; align-items: center; justify-content: center; transition: background 0.15s;
+  }
+  .modal-close:hover { background: var(--gray-200); }
+
+  /* GPS permission button */
+  .gps-btn {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--blue); color: white; border: none;
+    border-radius: 50px; padding: 10px 18px; font-size: 12px;
+    font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif;
+    transition: opacity 0.2s; margin: 12px auto 0; width: 100%;
+    justify-content: center;
+  }
+  .gps-btn:hover { opacity: 0.85; }
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <h1>Transporte Público</h1>
+  <p>informação para os usuários</p>
+</div>
+
+<div class="phone-frame">
+  <div class="notch"></div>
+  <div class="phone-screen">
+
+    <!-- LOGIN -->
+    <div class="screen login-screen active" id="screen-login">
+      <div class="login-logo">
+        <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+      </div>
+      <h2>Login</h2>
+      <p class="login-subtitle">Acesse sua conta de transporte</p>
+      <span class="field-label">Email</span>
+      <input class="login-input" type="text" value="exemplo@gmail.com" readonly/>
+      <span class="field-label">Senha</span>
+      <input class="login-input" type="password" value="SenhaSegura123" readonly/>
+      <button class="login-btn" onclick="goTo('rotas'); initLocation()">Entrar</button>
+      <p class="login-decorative-note">Tela decorativa — dados não são validados</p>
+    </div>
+
+    <!-- ROTAS -->
+    <div class="screen" id="screen-rotas" style="flex-direction:column;">
+      <div class="routes-screen" id="routes-scroll">
+        <h2 class="screen-title">Rotas</h2>
+
+        <div id="location-bar" class="location-bar" style="display:none;">
+          <div class="dot"></div>
+          <div class="loc-text" id="loc-text">Obtendo localização…</div>
+        </div>
+
+        <div class="field-group">
+          <span class="field-label" style="display:block;margin-bottom:6px;">Para onde você vai?</span>
+          <input class="route-input" type="text" placeholder="Seu Destino (bairro)"/>
+        </div>
+        <div class="field-group">
+          <span class="field-label" style="display:block;margin-bottom:6px;">Ponto mais próximo</span>
+          <input class="route-input" type="text" id="nearest-input" placeholder="Carregando…" readonly/>
+        </div>
+
+        <div class="stops-section">
+          <span class="stops-label">Paradas próximas</span>
+          <div id="stops-list">
+            <div class="status-box">
+              <div class="spin">⏳</div>
+              <p>Aguardando localização GPS…</p>
+              <button class="gps-btn" onclick="initLocation()">📍 Permitir localização</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom-nav">
+        <button class="nav-btn active" onclick="goTo('rotas')">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg></span>
+          <span class="nav-label">Rotas</span>
+        </button>
+        <button class="nav-btn" onclick="openProfile()">
+          <div class="nav-avatar">U</div>
+          <span class="nav-label">Perfil</span>
+        </button>
+        <button class="nav-btn" onclick="goTo('mapa')">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg></span>
+          <span class="nav-label">Mapa</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- MAPA -->
+    <div class="screen" id="screen-mapa" style="flex-direction:column;">
+      <div class="map-screen-wrapper">
+        <div class="map-header">
+          <h2 class="screen-title" style="margin-bottom:0;">Mapa</h2>
+        </div>
+        <div id="leaflet-map" style="flex:1;position:relative;">
+          <div class="map-status-overlay" id="map-overlay">
+            📍 Carregando mapa…
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom-nav">
+        <button class="nav-btn" onclick="goTo('rotas')">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg></span>
+          <span class="nav-label">Rotas</span>
+        </button>
+        <button class="nav-btn" onclick="openProfile()">
+          <div class="nav-avatar">U</div>
+          <span class="nav-label">Perfil</span>
+        </button>
+        <button class="nav-btn active" onclick="goTo('mapa')">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg></span>
+          <span class="nav-label">Mapa</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- PROFILE MODAL -->
+    <div class="modal-overlay" id="profileModal" onclick="closeProfileOutside(event)">
+      <div class="modal-sheet">
+        <button class="modal-close" onclick="closeProfile()">✕</button>
+        <div class="modal-handle"></div>
+        <div class="profile-header">
+          <div class="profile-avatar-large">U</div>
+          <div class="profile-info">
+            <h3>Usuário</h3>
+            <p>usuario@email.com</p>
+            <span class="profile-badge">Passageiro Regular</span>
+          </div>
+        </div>
+        <div class="profile-stats">
+          <div class="stat-item"><div class="stat-value">42</div><div class="stat-label">Viagens</div></div>
+          <div class="stat-item"><div class="stat-value">8</div><div class="stat-label">Rotas</div></div>
+          <div class="stat-item"><div class="stat-value">R$12</div><div class="stat-label">Saldo</div></div>
+        </div>
+        <div class="profile-menu-item"><div class="menu-icon">🪪</div><span class="menu-text">Minha Conta</span><span class="menu-arrow">›</span></div>
+        <div class="profile-menu-item"><div class="menu-icon">🎫</div><span class="menu-text">Meus Cartões</span><span class="menu-arrow">›</span></div>
+        <div class="profile-menu-item"><div class="menu-icon">📋</div><span class="menu-text">Histórico de Viagens</span><span class="menu-arrow">›</span></div>
+        <div class="profile-menu-item"><div class="menu-icon">⚙️</div><span class="menu-text">Configurações</span><span class="menu-arrow">›</span></div>
+        <div class="profile-menu-item" onclick="goTo('login'); closeProfile();">
+          <div class="menu-icon">🚪</div>
+          <span class="menu-text" style="color:#ef4444">Sair</span>
+          <span class="menu-arrow" style="color:#ef4444">›</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── State ──
+let userLat = null, userLon = null;
+let leafletMap = null, userMarker = null;
+let stopMarkers = [];
+let locationReady = false;
+
+// ── Navigation ──
+const screens = ['login', 'rotas', 'mapa'];
+function goTo(name) {
+  screens.forEach(s => document.getElementById('screen-' + s).classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  // Update active nav buttons
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll(`[onclick*="goTo('${name}')"]`).forEach(b => b.classList.add('active'));
+
+  if (name === 'mapa') {
+    setTimeout(() => {
+      if (!leafletMap) initMap();
+      else leafletMap.invalidateSize();
+    }, 100);
+  }
+}
+
+// ── Profile ──
+function openProfile() { document.getElementById('profileModal').classList.add('open'); }
+function closeProfile() { document.getElementById('profileModal').classList.remove('open'); }
+function closeProfileOutside(e) { if (e.target === document.getElementById('profileModal')) closeProfile(); }
+
+// ── Geolocation ──
+function initLocation() {
+  if (!navigator.geolocation) {
+    showStopsError('Geolocalização não suportada neste navegador.');
+    return;
+  }
+  document.getElementById('location-bar').style.display = 'flex';
+  document.getElementById('loc-text').textContent = 'Obtendo sua localização…';
+  document.getElementById('stops-list').innerHTML = `<div class="status-box"><div class="spin">🔄</div><p>Aguardando GPS…</p></div>`;
+
+  navigator.geolocation.getCurrentPosition(
+    pos => onLocation(pos.coords.latitude, pos.coords.longitude),
+    err => {
+      let msg = 'Erro ao obter localização.';
+      if (err.code === 1) msg = 'Permissão de localização negada. Verifique as configurações do navegador.';
+      if (err.code === 3) msg = 'Tempo esgotado. Tente novamente.';
+      showStopsError(msg);
+      document.getElementById('loc-text').textContent = '⚠️ ' + msg;
+    },
+    { enableHighAccuracy: true, timeout: 12000 }
+  );
+}
+
+function onLocation(lat, lon) {
+  userLat = lat; userLon = lon; locationReady = true;
+
+  // Reverse geocode with Nominatim
+  fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
+    .then(r => r.json())
+    .then(data => {
+      const addr = data.address;
+      const street = addr.road || addr.pedestrian || addr.street || '';
+      const district = addr.suburb || addr.neighbourhood || addr.city_district || addr.town || addr.city || '';
+      document.getElementById('loc-text').textContent = `📍 ${street}${street && district ? ', ' : ''}${district}`;
+    })
+    .catch(() => {
+      document.getElementById('loc-text').textContent = `📍 ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    });
+
+  fetchNearbyStops(lat, lon);
+  if (leafletMap) updateMapLocation(lat, lon);
+}
+
+// ── Fetch nearby bus stops from Overpass API ──
+async function fetchNearbyStops(lat, lon) {
+  document.getElementById('stops-list').innerHTML = `<div class="status-box"><div class="spin">🔄</div><p>Buscando paradas próximas…</p></div>`;
+
+  const radius = 600; // metros
+  const query = `
+    [out:json][timeout:15];
+    (
+      node["highway"="bus_stop"](around:${radius},${lat},${lon});
+      node["public_transport"="stop_position"](around:${radius},${lat},${lon});
+      node["amenity"="bus_station"](around:${radius},${lat},${lon});
+    );
+    out body 20;
+  `;
+
+  try {
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: query
+    });
+    const data = await res.json();
+    const elements = data.elements || [];
+
+    if (elements.length === 0) {
+      showStopsError('Nenhuma parada encontrada no raio de 600m. Tente uma área mais central.');
+      document.getElementById('nearest-input').value = 'Não encontrada';
+      return;
+    }
+
+    // Sort by distance
+    const withDist = elements.map(el => ({
+      ...el,
+      dist: haversine(lat, lon, el.lat, el.lon)
+    })).sort((a, b) => a.dist - b.dist);
+
+    // Fill nearest stop input
+    const nearest = withDist[0];
+    const nearestName = nearest.tags?.name || nearest.tags?.ref || 'Parada sem nome';
+    document.getElementById('nearest-input').value = `${nearestName} (${formatDist(nearest.dist)})`;
+
+    // Render list
+    const list = document.getElementById('stops-list');
+    list.innerHTML = '';
+    withDist.slice(0, 8).forEach(el => {
+      const name = el.tags?.name || el.tags?.ref || 'Parada sem nome';
+      const type = el.tags?.['public_transport'] === 'station' ? '🚉' : '🚌';
+      const item = document.createElement('div');
+      item.className = 'stop-item';
+      item.innerHTML = `
+        <div class="stop-icon">${type}</div>
+        <div class="stop-info">
+          <div class="stop-name">${name}</div>
+          <div class="stop-dist">${formatDist(el.dist)} de distância</div>
+        </div>
+        <div class="stop-arrow">›</div>
+      `;
+      item.onclick = () => { goTo('mapa'); if (leafletMap) panToStop(el.lat, el.lon, name); };
+      list.appendChild(item);
+    });
+
+    // Add markers to map
+    if (leafletMap) addStopMarkers(withDist);
+    else window._pendingStops = withDist;
+
+  } catch (e) {
+    showStopsError('Falha ao buscar paradas. Verifique sua conexão.');
+  }
+}
+
+function showStopsError(msg) {
+  document.getElementById('stops-list').innerHTML = `
+    <div class="status-box">
+      ⚠️ ${msg}
+      <button class="gps-btn" onclick="initLocation()" style="margin-top:10px;">🔄 Tentar novamente</button>
+    </div>`;
+}
+
+// ── Map ──
+function initMap() {
+  const mapEl = document.getElementById('leaflet-map');
+  const overlay = document.getElementById('map-overlay');
+
+  const center = locationReady ? [userLat, userLon] : [-14.235, -51.9253]; // Brazil center fallback
+  const zoom = locationReady ? 15 : 4;
+
+  leafletMap = L.map(mapEl, { zoomControl: true, attributionControl: false }).setView(center, zoom);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19
+  }).addTo(leafletMap);
+
+  overlay.style.display = 'none';
+
+  if (locationReady) {
+    updateMapLocation(userLat, userLon);
+  } else {
+    overlay.textContent = '📍 Aguardando GPS para centralizar o mapa…';
+    overlay.style.display = 'block';
+    initLocation();
+  }
+
+  if (window._pendingStops) {
+    addStopMarkers(window._pendingStops);
+    window._pendingStops = null;
+  }
+
+  setTimeout(() => leafletMap.invalidateSize(), 150);
+}
+
+function updateMapLocation(lat, lon) {
+  if (!leafletMap) return;
+
+  document.getElementById('map-overlay').style.display = 'none';
+  leafletMap.setView([lat, lon], 15);
+
+  if (userMarker) userMarker.remove();
+  const userIcon = L.divIcon({
+    className: '',
+    html: `<div style="width:16px;height:16px;border-radius:50%;background:#2563eb;border:3px solid white;box-shadow:0 2px 8px rgba(37,99,235,0.5);"></div>`,
+    iconSize: [16, 16], iconAnchor: [8, 8]
+  });
+  userMarker = L.marker([lat, lon], { icon: userIcon }).addTo(leafletMap);
+  userMarker.bindPopup('<b>Você está aqui</b>').openPopup();
+
+  if (window._pendingStops) { addStopMarkers(window._pendingStops); window._pendingStops = null; }
+}
+
+function addStopMarkers(stops) {
+  stopMarkers.forEach(m => m.remove());
+  stopMarkers = [];
+  stops.forEach(el => {
+    const name = el.tags?.name || el.tags?.ref || 'Parada';
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:22px;height:22px;border-radius:50%;background:#f59e0b;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:11px;">🚌</div>`,
+      iconSize: [22, 22], iconAnchor: [11, 11]
+    });
+    const m = L.marker([el.lat, el.lon], { icon }).addTo(leafletMap);
+    m.bindPopup(`<b>${name}</b><br><small>${formatDist(el.dist)} de você</small>`);
+    stopMarkers.push(m);
+  });
+}
+
+function panToStop(lat, lon, name) {
+  leafletMap.invalidateSize();
+  leafletMap.setView([lat, lon], 17);
+  stopMarkers.forEach(m => {
+    if (Math.abs(m.getLatLng().lat - lat) < 0.00001) m.openPopup();
+  });
+}
+
+// ── Helpers ──
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function formatDist(m) {
+  return m < 1000 ? `${Math.round(m)}m` : `${(m/1000).toFixed(1)}km`;
+}
+</script>
+</body>
+</html>
